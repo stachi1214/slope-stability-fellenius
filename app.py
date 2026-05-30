@@ -199,6 +199,13 @@ calculated_slices = fellenius_result["slices"]
 # -------------------------
 col1, col2 = st.columns([2, 1])
 
+st.info(
+    "このアプリは、フェルニウス法による円弧すべり安全率を理解するための"
+    "授業用・学習用ツールです。"
+    "地下水、地層構成、外力、地震力などは考慮していません。"
+    "実務設計や安全性評価には使用しないでください。"
+)
+
 with col1:
     st.plotly_chart(fig, use_container_width=True)
 
