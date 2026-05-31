@@ -7,7 +7,8 @@ from geometry import (
     create_circle_geometry,
     find_ground_circle_intersections,
     create_slice_boundaries,
-    create_slices
+    create_slices,
+    check_intersection_geometry
 )
 
 from fellenius import calculate_fellenius_factor_of_safety
@@ -19,84 +20,99 @@ st.set_page_config(
 )
 
 st.title("円弧すべり安全率計算アプリ")
-st.caption("フェルニウス法による斜面安定解析")
+st.caption("フェレニウス法による斜面安定解析")
 
+st.info(
+    "このアプリは、フェレニウス法による円弧すべり安全率を理解するための授業用・学習用ツールです。"
+)
 
 # -------------------------
 # 入力欄
 # -------------------------
 st.sidebar.header("入力条件")
 
-H = st.sidebar.number_input(
-    "斜面高さ H (m)",
-    min_value=0.1,
-    value=10.0,
-    step=0.5
-)
+with st.sidebar.expander("斜面条件", expanded=True):
+    H = st.number_input(
+        "斜面高さ H (m)",
+        min_value=0.1,
+        value=10.0,
+        step=0.5
+    )
 
-m = st.sidebar.number_input(
-    "斜面勾配 1:m",
-    min_value=0.1,
-    value=1.5,
-    step=0.1
-)
+    m = st.number_input(
+        "斜面勾配 1:m",
+        min_value=0.1,
+        value=1.5,
+        step=0.1
+    )
 
-gamma = st.sidebar.number_input(
-    "単位体積重量 γ (kN/m³)",
-    min_value=0.1,
-    value=18.0,
-    step=0.5
-)
+    gamma = st.number_input(
+        "単位体積重量 γ (kN/m³)",
+        min_value=0.1,
+        value=18.0,
+        step=0.5
+    )
 
-c = st.sidebar.number_input(
-    "有効粘着力 c' (kPa)",
-    min_value=0.0,
-    value=10.0,
-    step=1.0
-)
+with st.sidebar.expander("強度定数", expanded=True):
+    c = st.number_input(
+        "有効粘着力 c' (kPa)",
+        min_value=0.0,
+        value=10.0,
+        step=1.0
+    )
 
-phi_deg = st.sidebar.number_input(
-    "有効摩擦角 φ' (degree)",
-    min_value=0.0,
-    max_value=60.0,
-    value=30.0,
-    step=1.0
-)
+    phi_deg = st.number_input(
+        "有効摩擦角 φ' (degree)",
+        min_value=0.0,
+        max_value=60.0,
+        value=30.0,
+        step=1.0
+    )
 
-xc = st.sidebar.number_input(
-    "円中心 x座標 xc (m)",
-    value=5.0,
-    step=0.5
-)
+with st.sidebar.expander("すべり円条件", expanded=True):
+    xc = st.number_input(
+        "円中心 x座標 xc (m)",
+        value=5.0,
+        step=0.5
+    )
 
-yc = st.sidebar.number_input(
-    "円中心 y座標 yc (m)",
-    value=15.0,
-    step=0.5
-)
+    yc = st.number_input(
+        "円中心 y座標 yc (m)",
+        value=15.0,
+        step=0.5
+    )
 
-R = st.sidebar.number_input(
-    "円の半径 R (m)",
-    min_value=0.1,
-    value=15.0,
-    step=0.5
-)
+    R = st.number_input(
+        "円の半径 R (m)",
+        min_value=0.1,
+        value=15.0,
+        step=0.5
+    )
 
-n_slices = st.sidebar.number_input(
-    "スライス数",
-    min_value=2,
-    max_value=200,
-    value=20,
-    step=1
-)
-
+    n_slices = st.number_input(
+        "スライス数",
+        min_value=2,
+        max_value=200,
+        value=20,
+        step=1
+    )
 
 # -------------------------
 # 幾何データ作成
 # -------------------------
 x_ground, y_ground = create_slope_geometry(H, m)
 x_circle, y_circle = create_circle_geometry(xc, yc, R)
+
 intersections = find_ground_circle_intersections(H, m, xc, yc, R)
+
+intersection_geometry_checks = check_intersection_geometry(
+    intersections=intersections,
+    H=H,
+    m=m,
+    xc=xc,
+    yc=yc,
+    R=R
+)
 
 slice_boundaries = create_slice_boundaries(
     H=H,
@@ -129,7 +145,7 @@ fig.add_trace(go.Scatter(
     y=y_ground,
     mode="lines",
     name="地表面",
-    line=dict(width=3)
+    line=dict(width=4, color="black")
 ))
 
 fig.add_trace(go.Scatter(
@@ -137,7 +153,7 @@ fig.add_trace(go.Scatter(
     y=y_circle,
     mode="lines",
     name="すべり円",
-    line=dict(width=2)
+    line=dict(width=3, color="royalblue")
 ))
 
 if len(intersections) > 0:
@@ -170,16 +186,27 @@ fig.update_layout(
     height=600,
     xaxis=dict(
         title="x (m)",
-        range=[-1.2 * H, m * H + 1.2 * H]
+        range=[-1.2 * H, m * H + 1.2 * H],
+        showgrid=True,
+        zeroline=True
     ),
     yaxis=dict(
         title="y (m)",
         scaleanchor="x",
-        scaleratio=1
+        scaleratio=1,
+        showgrid=True,
+        zeroline=True
     ),
+    legend=dict(
+        orientation="h",
+        yanchor="bottom",
+        y=1.02,
+        xanchor="right",
+        x=1.0
+    ),
+    margin=dict(l=20, r=20, t=40, b=20),
     showlegend=True
 )
-
 
 # -------------------------
 # 安全率計算
@@ -199,13 +226,6 @@ calculated_slices = fellenius_result["slices"]
 # -------------------------
 col1, col2 = st.columns([2, 1])
 
-st.info(
-    "このアプリは、フェルニウス法による円弧すべり安全率を理解するための"
-    "授業用・学習用ツールです。"
-    "地下水、地層構成、外力、地震力などは考慮していません。"
-    "実務設計や安全性評価には使用しないでください。"
-)
-
 with col1:
     st.plotly_chart(fig, use_container_width=True)
 
@@ -221,7 +241,23 @@ with col2:
         st.warning("すべり円が地表面に1点で接しています。円弧すべり面としては不十分です。")
 
     elif len(intersections) == 2:
-        st.success("すべり円が地表面と2点で交わっています。")
+        has_invalid_angle = any(
+            not p["is_valid_angle"] for p in intersection_geometry_checks
+        )
+
+        if has_invalid_angle:
+            st.error(
+                "すべり円は地表面と2点で交わっていますが、"
+                "交点における円の接線方向角 θ が条件を満たしていません。"
+                " 右側交点では α < θ <= 90°、"
+                "左側交点では 270° <= θ < 360° + α を満たす必要があります。"
+                " 円中心または半径を見直してください。"
+            )
+        else:
+            st.success(
+                "すべり円が地表面と2点で交わっており、"
+                "左右の交点における円の接線方向角も条件を満たしています。"
+            )
 
     else:
         st.warning(
@@ -229,11 +265,11 @@ with col2:
             " 解析対象とする円弧の選択ルールを追加する必要があります。"
         )
 
-    for i, p in enumerate(intersections, start=1):
-        st.write(
-            f"交点 {i}: x = {p['x']:.3f} m, y = {p['y']:.3f} m, "
-            f"位置 = {p['segment']}"
-        )
+#    for i, p in enumerate(intersections, start=1):
+#        st.write(
+#           f"交点 {i}: x = {p['x']:.3f} m, y = {p['y']:.3f} m, "
+#           f"位置 = {p['segment']}"
+#        )
 
     if fellenius_result["sum_driving"] <= 0:
         st.error(
@@ -241,14 +277,25 @@ with col2:
             " すべり方向または円弧形状が不自然な可能性があります。"
         )
 
+
     if Fs is None:
-        st.warning("安全率を計算できません。滑動項がゼロに近い可能性があります。")
+        st.warning("安全率を計算できません。")
     else:
         st.metric("安全率 Fs", f"{Fs:.3f}")
 
-    st.write(f"抵抗項合計 = {fellenius_result['sum_resisting']:.3f} kN/m")
-    st.write(f"滑動項合計 = {fellenius_result['sum_driving']:.3f} kN/m")
+    result_col1, result_col2 = st.columns(2)
 
+    with result_col1:
+        st.metric(
+            "抵抗項合計",
+            f"{fellenius_result['sum_resisting']:.2f} kN/m"
+        )
+
+    with result_col2:
+        st.metric(
+            "滑動項合計",
+            f"{fellenius_result['sum_driving']:.2f} kN/m"
+        )
 
     st.subheader("入力条件の確認")
     st.write(f"斜面高さ H = {H} m")
@@ -260,15 +307,16 @@ with col2:
     st.write(f"円半径 R = {R} m")
     st.write(f"スライス数 = {n_slices}")
 
-    st.subheader("スライス分割")
+st.subheader("スライス分割")
 
-    if len(slice_boundaries) == 0:
-        st.warning("スライス分割を作成できません。交点が2点であるか確認してください。")
-    else:
-        st.success(f"{int(n_slices)} 個のスライスに分割しました。")
-        st.write(f"スライス境界線数：{len(slice_boundaries)} 本")
+if len(slice_boundaries) == 0:
+    st.warning("スライス分割を作成できません。交点が2点であるか確認してください。")
+else:
+    st.success(f"{int(n_slices)} 個のスライスに分割しました。")
+    st.write(f"スライス境界線数：{len(slice_boundaries)} 本")
 
-    st.subheader("スライス重量・フェルニウス法計算表")
+
+with st.expander("スライス重量・フェレニウス法計算表を表示", expanded=False):
 
     if len(calculated_slices) == 0:
         st.warning("スライス計算表を作成できません。")
@@ -276,7 +324,6 @@ with col2:
         total_area = sum(s["area"] for s in calculated_slices)
         total_weight = sum(s["weight"] for s in calculated_slices)
 
-        st.success("スライス重量とフェルニウス法の計算項目を計算しました。")
         st.write(f"総断面積 A = {total_area:.3f} m²")
         st.write(f"総重量 W = {total_weight:.3f} kN/m")
 

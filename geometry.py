@@ -386,3 +386,268 @@ def create_slices(
         })
 
     return slices
+
+def ground_tangent_vector(segment: str, H: float, m: float, direction: float = 1.0):
+    """
+    地表面の接線ベクトルを返す。
+
+    Parameters
+    ----------
+    segment : str
+        "front_ground", "slope_face", "back_ground"
+    H : float
+        斜面高さ
+    m : float
+        斜面勾配 1:m
+    direction : float
+        +1.0 のとき右向き
+        -1.0 のとき左向き
+    """
+
+    if segment == "front_ground":
+        v = np.array([1.0, 0.0])
+
+    elif segment == "slope_face":
+        # 斜面 y = x / m
+        v = np.array([1.0, 1.0 / m])
+
+    elif segment == "back_ground":
+        v = np.array([1.0, 0.0])
+
+    else:
+        return None
+
+    return direction * v
+
+
+def circle_lower_tangent_vector_at_point(
+    x: float,
+    y: float,
+    xc: float,
+    yc: float,
+    direction: float = 1.0
+):
+    """
+    円の下側円弧における接線ベクトルを返す。
+
+    Parameters
+    ----------
+    direction : float
+        +1.0 のとき右向き
+        -1.0 のとき左向き
+
+    円の式：
+        (x - xc)^2 + (y - yc)^2 = R^2
+
+    陰関数微分：
+        dy/dx = -(x - xc) / (y - yc)
+    """
+
+    denominator = y - yc
+
+    if abs(denominator) < 1.0e-12:
+        return None
+
+    slope = -(x - xc) / denominator
+
+    v = np.array([1.0, slope])
+
+    return direction * v
+
+def ground_slope_at_segment(segment: str, m: float):
+    """
+    地表面線分の傾きを返す。
+    """
+
+    if segment == "front_ground":
+        return 0.0
+
+    elif segment == "slope_face":
+        return 1.0 / m
+
+    elif segment == "back_ground":
+        return 0.0
+
+    else:
+        return None
+
+
+def circle_lower_slope_at_x(x: float, xc: float, yc: float, R: float):
+    """
+    円の下側円弧 y = yc - sqrt(R^2 - (x - xc)^2) の傾きを返す。
+    """
+
+    value = R**2 - (x - xc)**2
+
+    if value <= 0:
+        return None
+
+    y = yc - np.sqrt(value)
+
+    denominator = y - yc
+
+    if abs(denominator) < 1.0e-12:
+        return None
+
+    # 陰関数微分：
+    # dy/dx = -(x - xc) / (y - yc)
+    slope = -(x - xc) / denominator
+
+    return slope
+
+def ground_angle_at_segment(segment: str, m: float):
+    """
+    地表面線分が水平面となす角度 alpha [degree] を返す。
+
+    front_ground, back_ground は水平なので alpha = 0。
+    slope_face は y = x / m なので alpha = atan(1/m)。
+    """
+
+    if segment == "front_ground":
+        return 0.0
+
+    elif segment == "slope_face":
+        return np.rad2deg(np.arctan(1.0 / m))
+
+    elif segment == "back_ground":
+        return 0.0
+
+    else:
+        return None
+
+
+def circle_lower_tangent_angle_deg(x: float, y: float, xc: float, yc: float):
+    """
+    円の下側円弧における接線方向角 theta [degree] を返す。
+
+    角度は、x軸正方向を0°とし、反時計回りを正とする。
+    戻り値は 0° <= theta < 360°。
+
+    下側円弧：
+        y = yc - sqrt(R^2 - (x - xc)^2)
+
+    陰関数微分：
+        dy/dx = -(x - xc) / (y - yc)
+
+    接線方向ベクトルは基本的に (1, dy/dx) として扱う。
+    """
+
+    dx = x - xc
+    dy = y - yc
+
+    # 円の左右端付近では接線が鉛直になる
+    if abs(dy) < 1.0e-12:
+        if dx > 0:
+            # 右端：接線方向は真上
+            return 90.0
+        elif dx < 0:
+            # 左端：接線方向は真下
+            return 270.0
+        else:
+            return None
+
+    slope = -dx / dy
+
+    theta = np.rad2deg(np.arctan2(slope, 1.0))
+
+    # 0〜360°に正規化
+    if theta < 0.0:
+        theta += 360.0
+
+    return theta
+
+
+def check_intersection_geometry(
+    intersections,
+    H: float,
+    m: float,
+    xc: float,
+    yc: float,
+    R: float
+):
+    """
+    地表面とすべり円の交点における接線方向角をチェックする。
+
+    条件：
+    - 地表面と円は2点で交わること
+    - 右側交点：
+        alpha < theta <= 90°
+    - 左側交点：
+        270° <= theta < 360° + alpha
+
+    ここで、
+        alpha : 交点が属する地表面線分の傾斜角 [degree]
+        theta : 円の下側円弧の接線方向角 [degree]
+    """
+
+    if len(intersections) != 2:
+        return []
+
+    intersections_sorted = sorted(intersections, key=lambda p: p["x"])
+
+    checks = []
+
+    for idx, p in enumerate(intersections_sorted):
+        x = p["x"]
+        y = p["y"]
+        segment = p["segment"]
+
+        alpha_deg = ground_angle_at_segment(segment, m)
+        theta_deg = circle_lower_tangent_angle_deg(x, y, xc, yc)
+
+        if alpha_deg is None or theta_deg is None:
+            is_valid_angle = False
+            theta_for_check = None
+
+        else:
+            if idx == 0:
+                # 左側交点
+                side = "left"
+
+                # 左側では 270° <= theta < 360° + alpha を判定する。
+                # theta が 0〜180°側に出た場合は、360°を足して扱う。
+                if theta_deg < 180.0:
+                    theta_for_check = theta_deg + 360.0
+                else:
+                    theta_for_check = theta_deg
+
+                is_valid_angle = (
+                    270.0 <= theta_for_check < 360.0 + alpha_deg
+                )
+
+            else:
+                # 右側交点
+                side = "right"
+                theta_for_check = theta_deg
+
+                is_valid_angle = (
+                    alpha_deg < theta_for_check <= 90.0
+                )
+
+        if idx == 0:
+            side = "left"
+        else:
+            side = "right"
+
+        checks.append({
+            "x": x,
+            "y": y,
+            "segment": segment,
+            "side": side,
+            "alpha_deg": alpha_deg,
+            "theta_deg": theta_deg,
+            "theta_for_check": theta_for_check,
+            "is_valid_angle": is_valid_angle,
+
+            # app.py 側で以前の変数名を使っていても動くように残す
+            "is_valid_inside": is_valid_angle,
+            "gap_inside": None,
+            "contact_angle_deg": theta_for_check
+        })
+
+    return checks
+
+
+
+
+
